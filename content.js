@@ -466,10 +466,29 @@
     // =======================================================
     const requestedFilesCache = new Set();
 
+    // Helper to soft-match file paths (e.g. matching bridge.py to worktrees/folder/bridge.py)
+    function findFileByPath(filePath) {
+        const cleanPath = filePath.toLowerCase().replace(/\\/g, '/').trim();
+        return scannedFiles.find(f => {
+            const fPath = f.path.toLowerCase().replace(/\\/g, '/');
+            return fPath === cleanPath || 
+                   fPath.endsWith('/' + cleanPath) ||
+                   fPath === cleanPath.substring(cleanPath.lastIndexOf('/') + 1);
+        });
+    }
+
     setInterval(async () => {
         if (!autoSubmitSwitch.checked || scannedFiles.length === 0) return;
 
-        const assistantMessages = document.querySelectorAll('div[data-message-author-role="assistant"]');
+        // Expanded selectors for absolute compatibility with ChatGPT, Claude, and Gemini markup
+        const assistantMessages = document.querySelectorAll([
+            'div[data-message-author-role="assistant"]',
+            '.agent-turn',
+            '.markdown.prose',
+            '.markdown',
+            '.prose'
+        ].join(','));
+        
         let filesToInject = [];
         let filesToUpdate = [];
 
@@ -482,11 +501,14 @@
             while ((requestMatch = requestRegex.exec(text)) !== null) {
                 const filePath = requestMatch[1].trim();
                 if (!requestedFilesCache.has(filePath)) {
-                    requestedFilesCache.add(filePath);
-                    
-                    const fileObj = scannedFiles.find(f => f.path === filePath);
-                    if (fileObj && !fileObj.selected) {
-                        filesToInject.push(fileObj);
+                    const fileObj = findFileByPath(filePath);
+                    if (fileObj) {
+                        if (!fileObj.selected) {
+                            requestedFilesCache.add(filePath); // Only cache on SUCCESS
+                            filesToInject.push(fileObj);
+                        }
+                    } else {
+                        log(`ChatGPT requested '${filePath}', but it wasn't found in your workspace checklist. Check spelling or subfolders.`, 'warn');
                     }
                 }
             }
