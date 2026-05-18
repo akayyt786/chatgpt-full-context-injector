@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ChatGPT Mockup Test Environment</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #212121;
+            color: #ececf1;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: #2f2f2f;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            overflow: hidden;
+        }
+        .chat-header {
+            background: #202123;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #4d4d4f;
+        }
+        .chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 85%;
+        }
+        .user-message {
+            background-color: #3e3f4b;
+            align-self: flex-end;
+        }
+        .assistant-message {
+            background-color: #444654;
+            align-self: flex-start;
+            border: 1px solid #4d4d4f;
+        }
+        .chat-input-area {
+            padding: 20px;
+            background: #202123;
+            border-top: 1px solid #4d4d4f;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        textarea {
+            flex: 1;
+            background: #40414f;
+            border: 1px solid #565869;
+            border-radius: 4px;
+            color: #ececf1;
+            padding: 10px;
+            height: 50px;
+            resize: none;
+            outline: none;
+        }
+        button.send-btn {
+            background: #19c37d;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button.send-btn:disabled {
+            background: #4e4f60;
+            cursor: not-allowed;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .control-btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .control-btn:hover {
+            background: #4338ca;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="margin: 0 0 10px 0;">🤖 ChatGPT Auto-Write Extension Mock Tester</h2>
+    <p style="margin: 0 0 20px 0; color: #b0b0b0; font-size: 14px;">Use the controls below to simulate ChatGPT responding with file requests or writes.</p>
+
+    <div class="controls">
+        <button class="control-btn" onclick="simulateRequest()">Simulate ChatGPT: Request 'bridge.py'</button>
+        <button class="control-btn" style="background: #10b981;" onclick="simulateWrite()">Simulate ChatGPT: Auto-Write 'test_write.txt'</button>
+        <button class="control-btn" style="background: #ef4444;" onclick="clearChat()">Clear Chat</button>
+    </div>
+
+    <div class="container">
+        <div class="chat-header">Simulated ChatGPT Workspace</div>
+        
+        <div class="chat-history" id="chat-history">
+            <div class="message assistant-message" data-message-author-role="assistant">
+                Hello! I am a simulated ChatGPT assistant. Select a folder using the "Context Injector" sidebar on the right to start testing.
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <!-- Selector matches exactly what the extension is looking for -->
+            <textarea id="prompt-textarea" placeholder="Send a message..."></textarea>
+            <button class="send-btn" id="send-button" data-testid="send-button" onclick="handleSend()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const promptTextarea = document.getElementById('prompt-textarea');
+        const sendButton = document.getElementById('send-button');
+
+        function simulateRequest() {
+            const msg = document.createElement('div');
+            msg.className = 'message assistant-message';
+            msg.setAttribute('data-message-author-role', 'assistant');
+            msg.innerHTML = `<strong>ChatGPT:</strong><br>I need to see your bridge configuration. Please provide the file:<br><br><code>[REQUEST_FILE: bridge.py]</code>`;
+            chatHistory.appendChild(msg);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function simulateWrite() {
+            const msg = document.createElement('div');
+            msg.className = 'message assistant-message';
+            msg.setAttribute('data-message-author-role', 'assistant');
+            msg.innerHTML = `<strong>ChatGPT:</strong><br>I will now write a test file directly to your disk:<br><br>
+<code>[UPDATE_FILE: test_write.txt]
+Hello from the fully Autonomous ChatGPT Auto-Write Agent!
+Timestamp: ${new Date().toLocaleString()}
+Successfully verified the local connection loop!
+[/UPDATE_FILE]</code>`;
+            chatHistory.appendChild(msg);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function clearChat() {
+            chatHistory.innerHTML = `
+                <div class="message assistant-message" data-message-author-role="assistant">
+                    Chat cleared. Ready for new test.
+                </div>
+            `;
+        }
+
+        function handleSend() {
+            const text = promptTextarea.value.trim();
+            if (!text) return;
+
+            // Render user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message user-message';
+            userMsg.innerHTML = `<strong>You:</strong><br>${text.replace(/\n/g, '<br>')}`;
+            chatHistory.appendChild(userMsg);
+
+            promptTextarea.value = '';
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            // Auto-reply context after a brief delay if it was a file injection
+            if (text.includes('[Autonomous Agent Auto-Fetch]')) {
+                setTimeout(() => {
+                    const msg = document.createElement('div');
+                    msg.className = 'message assistant-message';
+                    msg.setAttribute('data-message-author-role', 'assistant');
+                    msg.innerHTML = `<strong>ChatGPT:</strong><br>Received the file successfully! I will now modify your code inside the bridge file:<br><br>
+<code>[UPDATE_FILE: bridge.py]
+# Modifying bridge file dynamically...
+print("Autonomous update completed successfully!")
+[/UPDATE_FILE]</code>`;
+                    chatHistory.appendChild(msg);
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
+                }, 2000);
+            }
+        }
+    </script>
+
+</body>
+</html>
