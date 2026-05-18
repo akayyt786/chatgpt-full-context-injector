@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Context Injector Pro",
+  "version": "1.0.0",
+  "description": "Adds a powerful slide-out sidebar directly in ChatGPT to scan and inject local folders with token metrics and selective checkboxes.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.chatgpt.com/*",
+    "https://chatgpt.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ChatGPT Context Injector Sidebar Help"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.chatgpt.com/*",
+        "https://chatgpt.com/*"
+      ],
+      "css": ["sidebar.css"],
+      "js": ["content.js"]
+    }
+  ]
+}
