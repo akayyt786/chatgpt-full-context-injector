@@ -85,6 +85,14 @@
             Inject Selected Files
         </button>
 
+        <!-- Connection Status & Console -->
+        <div class="cip-console" style="margin-top: 15px;">
+            <div class="cip-console-header" style="justify-content: space-between; align-items: center; display: flex;">
+                <span>Auto-Write Server Connection</span>
+                <span id="cip-server-badge" style="font-size: 10px; font-weight: 600; color: #ef4444; transition: color 0.3s;">🔴 Offline (Read-Only)</span>
+            </div>
+        </div>
+
         <div class="cip-console">
             <div class="cip-console-header">
                 <span>Injector Console</span>
@@ -98,6 +106,7 @@
     // Dynamic Variables & State
     let scannedFiles = [];
     let rootFolderName = 'Workspace';
+    let isServerConnected = false;
     
     const logOutput = document.getElementById('cip-log-output');
     const pulseDot = document.getElementById('cip-console-pulse');
@@ -106,6 +115,7 @@
     const filesView = document.getElementById('cip-files-view');
     const folderInput = document.getElementById('cip-folder-input');
     const injectSelectedBtn = document.getElementById('cip-inject-selected-btn');
+    const serverBadge = document.getElementById('cip-server-badge');
 
     const statFiles = document.getElementById('cip-stat-files');
     const statSize = document.getElementById('cip-stat-size');
@@ -182,6 +192,34 @@
         logOutput.innerHTML = '';
     }
 
+    // Ping Companion Server Connection
+    async function checkServerConnection() {
+        try {
+            const res = await fetch('http://localhost:3111/ping');
+            const data = await res.json();
+            if (data.status === 'connected') {
+                if (!isServerConnected) {
+                    log(`Companion server connected! Root: ${data.root}`, 'success');
+                }
+                isServerConnected = true;
+                serverBadge.textContent = '🟢 Connected (Active)';
+                serverBadge.style.color = '#10b981';
+            } else {
+                isServerConnected = false;
+                serverBadge.textContent = '🔴 Offline (Read-Only)';
+                serverBadge.style.color = '#ef4444';
+            }
+        } catch (e) {
+            isServerConnected = false;
+            serverBadge.textContent = '🔴 Offline (Read-Only)';
+            serverBadge.style.color = '#ef4444';
+        }
+    }
+
+    // Connection Ping Interval (Every 5 seconds)
+    setInterval(checkServerConnection, 5000);
+    checkServerConnection();
+
     // Click trigger on hidden folder input
     document.getElementById('cip-scan-btn').addEventListener('click', () => {
         folderInput.click();
@@ -238,7 +276,7 @@
                     const snippet = await file.slice(0, 300).text();
                     preview = snippet.split('\n').slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
                     if (preview.length > 100) preview = preview.substring(0, 100) + "...";
-                } catch(e) {}
+                } catch(err) {}
 
                 scannedFiles.push({
                     fileObj: file, // Store the raw File object to read deferred later
@@ -363,8 +401,9 @@
         let payload = `[ChatGPT Folder Connector Pro]\n`;
         payload += `Workspace Root: ${rootFolderName}\n`;
         payload += `I am working on this project. Here are the ${scannedFiles.length} files in my repository.\n`;
-        payload += `Please review the structure and the brief code snippets provided for context.\n`;
-        payload += `CRITICAL INSTRUCTION: If you need to see the full code of any file, you must request it by replying with exactly this format: [REQUEST_FILE: path/to/file.js]. The user's Autonomous Agent will automatically fetch it and inject it for you.\n\n`;
+        payload += `Please review the structure and the brief code snippets provided for context.\n\n`;
+        payload += `CRITICAL INSTRUCTION 1: If you need to see the full code of any file, you must request it by replying with exactly this format: [REQUEST_FILE: path/to/file.js]. The user's Autonomous Agent will automatically fetch it and inject it for you.\n`;
+        payload += `CRITICAL INSTRUCTION 2: If you want to create or edit a file directly on the user's hard drive, output the full file code inside this exact syntax block: [UPDATE_FILE: path/to/file.js]\\n// Full code goes here\\n[/UPDATE_FILE]. The user's Auto-Write server will automatically save it directly to disk!\n\n`;
         payload += `Directory Structure:\n`;
         scannedFiles.forEach(f => {
             payload += ` - ${f.path} (${(f.size / 1024).toFixed(1)} KB)\n`;
@@ -415,16 +454,16 @@
                     log('Chat submitted automatically.', 'success');
                 } else if (retries < 30) {
                     retries++;
-                    setTimeout(trySend, 1000); // Wait 1 second and try again (in case ChatGPT is still generating)
+                    setTimeout(trySend, 1000); // Wait 1 second and try again (waiting for ChatGPT generation to finish)
                 }
             };
             setTimeout(trySend, 300);
         }
     }
 
-    // ==========================================
-    // Autonomous Agent Loop (Auto-Fetch Files)
-    // ==========================================
+    // =======================================================
+    // Autonomous Agent Loop (Auto-Fetch & Auto-Write Files)
+    // =======================================================
     const requestedFilesCache = new Set();
 
     setInterval(async () => {
@@ -432,14 +471,16 @@
 
         const assistantMessages = document.querySelectorAll('div[data-message-author-role="assistant"]');
         let filesToInject = [];
+        let filesToUpdate = [];
 
         assistantMessages.forEach(msg => {
             const text = msg.textContent;
-            const regex = /\[REQUEST_FILE:\s*(.+?)\]/g;
-            let match;
-            
-            while ((match = regex.exec(text)) !== null) {
-                const filePath = match[1].trim();
+
+            // 1. Scan for requested files: [REQUEST_FILE: src/main.js]
+            const requestRegex = /\[REQUEST_FILE:\s*(.+?)\]/g;
+            let requestMatch;
+            while ((requestMatch = requestRegex.exec(text)) !== null) {
+                const filePath = requestMatch[1].trim();
                 if (!requestedFilesCache.has(filePath)) {
                     requestedFilesCache.add(filePath);
                     
@@ -449,8 +490,24 @@
                     }
                 }
             }
+
+            // 2. Scan for update file blocks: [UPDATE_FILE: src/main.js] code [/UPDATE_FILE]
+            const updateRegex = /\[UPDATE_FILE:\s*(.+?)\]([\s\S]*?)\[\/UPDATE_FILE\]/g;
+            let updateMatch;
+            while ((updateMatch = updateRegex.exec(text)) !== null) {
+                const filePath = updateMatch[1].trim();
+                const fileContent = updateMatch[2].trim();
+                
+                // Create a unique key using path and size to prevent writing the exact same update in a loop
+                const updateKey = `${filePath}_${fileContent.length}`;
+                if (!requestedFilesCache.has(updateKey)) {
+                    requestedFilesCache.add(updateKey);
+                    filesToUpdate.push({ path: filePath, content: fileContent });
+                }
+            }
         });
 
+        // Handle Autonomous File Fetching
         if (filesToInject.length > 0) {
             log(`Agent detected file request! Auto-fetching ${filesToInject.length} files...`, 'success');
             pulseDot.classList.add('running');
@@ -465,6 +522,42 @@
             renderFileList();
             updateMetrics();
             doInjection(payload);
+            pulseDot.classList.remove('running');
+        }
+
+        // Handle Autonomous File Writing (Only if Local Server is Connected!)
+        if (filesToUpdate.length > 0) {
+            if (!isServerConnected) {
+                log(`Agent detected code updates, but companion server is offline. Run 'node local-server/server.js' to enable Auto-Write!`, 'warn');
+                return;
+            }
+
+            log(`Agent detected local changes! Auto-saving ${filesToUpdate.length} files...`, 'success');
+            pulseDot.classList.add('running');
+            
+            let confirmationPayload = `[Autonomous Agent Write Action]\n`;
+            for (let f of filesToUpdate) {
+                try {
+                    const res = await fetch('http://localhost:3111/update-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: f.path, content: f.content })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        log(`Successfully saved local changes to: ${f.path}`, 'success');
+                        confirmationPayload += `✓ Successfully saved local changes to disk for ${f.path}\n`;
+                    } else {
+                        log(`Failed to save ${f.path}: ${data.error}`, 'error');
+                        confirmationPayload += `✗ Failed to save ${f.path}: ${data.error}\n`;
+                    }
+                } catch (err) {
+                    log(`Server error writing ${f.path}: ${err.message}`, 'error');
+                    confirmationPayload += `✗ Server error writing ${f.path}: ${err.message}\n`;
+                }
+            }
+            
+            doInjection(confirmationPayload);
             pulseDot.classList.remove('running');
         }
     }, 2500);
